@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SolarBridge ESP32 — Inverter WebApp</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script defer src="js/app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="logo">⚡</div>
+        <div>
+          <h1>SolarBridge</h1>
+          <small>ESP32 Inverter Gateway</small>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-page="dashboard">Dashboard</button>
+        <button class="nav-item" data-page="live">Live dati</button>
+        <button class="nav-item" data-page="history">Storico</button>
+        <button class="nav-item" data-page="inverter">Inverter</button>
+        <button class="nav-item" data-page="modbus">Modbus / RS485</button>
+        <button class="nav-item" data-page="battery">Batteria</button>
+        <button class="nav-item" data-page="loads">Carichi smart</button>
+        <button class="nav-item" data-page="alerts">Allarmi</button>
+        <button class="nav-item" data-page="settings">Impostazioni</button>
+        <button class="nav-item" data-page="api">API & MQTT</button>
+      </nav>
+      <div class="side-status">
+        <span class="pulse"></span>
+        <span id="connectionLabel">Demo online</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="menuBtn" class="icon-btn">☰</button>
+        <div>
+          <h2 id="pageTitle">Dashboard energia</h2>
+          <p id="pageSubtitle">Monitoraggio produzione, consumi, batteria e rete</p>
+        </div>
+        <div class="top-actions">
+          <button class="ghost" id="toggleDemo">Demo ON</button>
+          <button class="primary" id="refreshBtn">Aggiorna</button>
+        </div>
+      </header>
+
+      <section class="page active" id="dashboard">
+        <div class="hero-grid">
+          <div class="power-card pv"><span>Produzione FV</span><strong id="pvPower">0 W</strong><small id="pvVoltage">PV 0 V</small></div>
+          <div class="power-card house"><span>Consumo casa</span><strong id="loadPower">0 W</strong><small>Carichi istantanei</small></div>
+          <div class="power-card grid"><span>Rete ENEL</span><strong id="gridPower">0 W</strong><small id="gridMode">Zero export</small></div>
+          <div class="power-card battery"><span>Batteria</span><strong id="batterySoc">0%</strong><small id="batteryFlow">0 W</small></div>
+        </div>
+
+        <div class="flow-card card">
+          <div class="flow-node sun">☀️<span>Pannelli</span><b id="flowPv">0 W</b></div>
+          <div class="flow-line"></div>
+          <div class="flow-node inv">🔌<span>Inverter</span><b id="flowInv">OK</b></div>
+          <div class="flow-line"></div>
+          <div class="flow-node home">🏠<span>Casa</span><b id="flowLoad">0 W</b></div>
+          <div class="flow-node bat">🔋<span>Batteria</span><b id="flowBat">0%</b></div>
+          <div class="flow-node net">🌐<span>Rete</span><b id="flowGrid">0 W</b></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h3>Grafico potenza oggi</h3><span>mock/live</span></div>
+            <canvas id="powerChart" height="170"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Energia giornaliera</h3><span>kWh</span></div>
+            <div class="kpi-list">
+              <div><span>Prodotta</span><b id="kwhProduced">0.0</b></div>
+              <div><span>Consumata</span><b id="kwhConsumed">0.0</b></div>
+              <div><span>Da rete</span><b id="kwhGridIn">0.0</b></div>
+              <div><span>In batteria</span><b id="kwhBattery">0.0</b></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="live">
+        <div class="card">
+          <div class="card-head"><h3>Telemetria live inverter</h3><button class="ghost" id="copyJson">Copia JSON</button></div>
+          <pre id="liveJson" class="codebox"></pre>
+        </div>
+        <div class="grid-3" id="liveGrid"></div>
+      </section>
+
+      <section class="page" id="history">
+        <div class="card">
+          <div class="card-head"><h3>Storico e report</h3><button class="primary" id="exportCsv">Esporta CSV</button></div>
+          <table class="table" id="historyTable"><thead><tr><th>Ora</th><th>FV W</th><th>Casa W</th><th>Rete W</th><th>Batt %</th><th>Stato</th></tr></thead><tbody></tbody></table>
+        </div>
+      </section>
+
+      <section class="page" id="inverter">
+        <div class="grid-2">
+          <div class="card form-card">
+            <h3>Profilo inverter</h3>
+            <label>Marca <input id="invBrand" placeholder="es. Growatt, Deye, Solis, Voltronic..." /></label>
+            <label>Modello <input id="invModel" placeholder="Modello preciso inverter" /></label>
+            <label>Porta fisica <select id="invPort"><option>RJ45 RS485</option><option>RJ45 UART</option><option>RJ45 CAN</option><option>USB seriale</option><option>Modbus TCP</option></select></label>
+            <label>Modalità <select id="invMode"><option>Zero export</option><option>Ibrido con batteria</option><option>Solo monitoraggio</option><option>Backup EPS</option></select></label>
+            <button class="primary save-settings">Salva profilo</button>
+          </div>
+          <div class="card">
+            <h3>Stato compatibilità</h3>
+            <ul class="check-list">
+              <li>✅ Dashboard web locale pronta</li>
+              <li>✅ Endpoint API `/api/status` previsto</li>
+              <li>✅ Layer dati separato per sostituire mock con Modbus reale</li>
+              <li>⚠️ Serve mappa registri Modbus del modello inverter</li>
+              <li>⚠️ Serve pinout reale della porta RJ45 prima di collegare ESP32</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="modbus">
+        <div class="grid-2">
+          <div class="card form-card">
+            <h3>Configurazione Modbus</h3>
+            <label>Slave ID <input id="slaveId" type="number" value="1" /></label>
+            <label>Baud rate <select id="baud"><option>9600</option><option>19200</option><option>38400</option><option>115200</option></select></label>
+            <label>Parità <select id="parity"><option>Nessuna</option><option>Even</option><option>Odd</option></select></label>
+            <label>Polling ms <input id="polling" type="number" value="2000" /></label>
+            <button class="primary save-settings">Salva Modbus</button>
+          </div>
+          <div class="card">
+            <h3>Mappa registri placeholder</h3>
+            <table class="table compact"><thead><tr><th>Dato</th><th>Registro</th><th>Scala</th></tr></thead><tbody id="registerTable"></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="battery">
+        <div class="grid-3">
+          <div class="card metric"><span>SOC</span><b id="batSoc2">0%</b></div>
+          <div class="card metric"><span>Tensione</span><b id="batVolt">0 V</b></div>
+          <div class="card metric"><span>Corrente</span><b id="batAmp">0 A</b></div>
+        </div>
+        <div class="card form-card">
+          <h3>Regole batteria</h3>
+          <label>SOC minimo backup % <input type="number" value="25" /></label>
+          <label>SOC massimo carica % <input type="number" value="95" /></label>
+          <label>Priorità <select><option>Casa prima</option><option>Batteria prima</option><option>Auto solo surplus</option></select></label>
+          <button class="primary save-settings">Salva regole</button>
+        </div>
+      </section>
+
+      <section class="page" id="loads">
+        <div class="card">
+          <div class="card-head"><h3>Automazioni carichi</h3><button class="primary" id="addRule">Aggiungi regola</button></div>
+          <div id="rulesList" class="rules"></div>
+        </div>
+      </section>
+
+      <section class="page" id="alerts">
+        <div class="grid-2">
+          <div class="card form-card">
+            <h3>Notifiche</h3>
+            <label><input type="checkbox" checked /> Batteria bassa</label>
+            <label><input type="checkbox" checked /> Inverter offline</label>
+            <label><input type="checkbox" checked /> Produzione anomala</label>
+            <label><input type="checkbox" /> Telegram webhook</label>
+            <label><input type="checkbox" /> Email SMTP</label>
+            <button class="primary save-settings">Salva allarmi</button>
+          </div>
+          <div class="card">
+            <h3>Log eventi</h3>
+            <div id="eventLog" class="event-log"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="settings">
+        <div class="grid-2">
+          <div class="card form-card">
+            <h3>Rete ESP32</h3>
+            <label>Hostname <input value="solarbridge.local" /></label>
+            <label>Wi‑Fi SSID <input placeholder="Nome rete" /></label>
+            <label>Password Wi‑Fi <input type="password" placeholder="••••••••" /></label>
+            <label>IP statico <input placeholder="192.168.1.50" /></label>
+            <button class="primary save-settings">Salva rete</button>
+          </div>
+          <div class="card form-card">
+            <h3>Sistema</h3>
+            <label>Tema <select id="themeSelect"><option value="dark">Scuro premium</option><option value="light">Chiaro</option><option value="contrast">Alto contrasto</option></select></label>
+            <label>Unità energia <select><option>kWh</option><option>Wh</option></select></label>
+            <label>Aggiornamento OTA <input placeholder="URL firmware .bin" /></label>
+            <button class="primary save-settings">Salva sistema</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="api">
+        <div class="card">
+          <h3>Endpoint previsti per ESP32/backend</h3>
+          <pre class="codebox">GET  /api/status
+GET  /api/history
+POST /api/settings
+POST /api/modbus/test
+POST /api/load/rule
+POST /api/ota/update
+MQTT solarbridge/status
+MQTT solarbridge/alerts
+MQTT solarbridge/commands</pre>
+        </div>
+        <div class="card">
+          <h3>Contratto dati JSON</h3>
+          <pre class="codebox" id="apiExample"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast"></div>
+</body>
+</html>
